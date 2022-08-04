@@ -10,7 +10,7 @@ EP="https://${LOCATION_ID}-dialogflow.googleapis.com/v3/"
 location="projects/$PROJECT_ID/locations/$LOCATION_ID"
 echo > logs/errors.log
 
-gdfcurl() {
+gdfcurl() { #use global endpoint otherwise the same as dfcurl
   _EP=$EP ; EP=$GEP
   #echo dfcurl "$@"
   dfcurl "$@"
@@ -23,7 +23,7 @@ gettoken() {
   echo gcloud auth print-access-token
 }
 
-dfcurl() {
+dfcurl() { # make rest call - args 1 url path past the api base (/projects/...) 2 method 3 data (string or file) 4 file to store the response in    
   [[ -z "$2" ]] && method=""
   [[ -z "$3" ]] && data=""
   [[ -n "$3" ]] && data=" -d '$3'"
@@ -44,12 +44,12 @@ dfcurl() {
   echo "$resp"> "$resp_file"
 }
 
-list_agents() {
+list_agents() { # list any agents in the project (-r will print the json) 
 	[[ $1 = "-r" ]] && dfcurl ${location}/agents && return
 	 dfcurl ${location}/agents | jq -r '.agents[]|[.displayName,(.name|split("/"))[-1]]|@tsv' 2>>logs/errors.log
 }
 
-start_conv() {
+start_conv() { # starts a new conversation return conversation id (convid)
   cp="";convid=""
   [[ -n $1 ]] && cp="$(list_conv_profiles | grep "$1" | awk '{printf $NF}' | tail -1 2>/dev/null)" \
   || cp="$(list_conv_profiles | awk ' {printf $NF}' 2>/dev/null| tail -1 2>/dev/null)"
@@ -60,27 +60,27 @@ start_conv() {
   echo $convid
 }
 
-add_participant() {
+add_participant() { #add participents to the conersation (convid)
   [[ -z $1 ]] && echo "missing conversation id" && return
   #gdfcurl $1/participants post '{ "role": "END_USER", }'
   partid=$(gdfcurl $1/participants post '{ "role": "END_USER", }' | jq -r '.name')
   echo $partid
 }
 
-list_participants() {
+list_participants() { # list participents for the conversation - args 1 (convid) 
   [[ -z $1 ]] && echo "missing conversation id" && return
   partids="$(gdfcurl $1/participants | jq '.participants[].name' 2>/dev/null)"
   [[ -z $partids ||  $partids == "null" ]] ||echo "$partids"
 }
 
-list_conv_profiles() {
+list_conv_profiles() { #list conversation profiles
   [[ $1 == "-r" ]] && dfcurl projects/$PROJECT_ID/conversationProfiles && return
   #dfcurl projects/$PROJECT_ID/conversationProfiles | jq -r '.conversationProfiles[]|[.displayName,(.name|split("/"))[-1]]|@tsv'
   profiles=$(gdfcurl projects/$PROJECT_ID/conversationProfiles | jq -r '.conversationProfiles[]|[.displayName,.name]|@tsv ' 2>/dev/null)
   echo "$profiles"
 }
 
-create_conv_profile() {
+create_conv_profile() { # creates conevrsation profile
   [[ -n $1 ]] && [[ -f $1 ]] && pl=$1
   [[ -n $1 ]] && [[ ! -f $1 ]] && _pl='{"displayName":"__"}' && pl=${_pl/__/$1}
   [[ -z $1 ]] && pl='{"displayName":"Test Conversation Profile"}'
@@ -88,7 +88,7 @@ create_conv_profile() {
   echo "$profile"
 }
 
-delete_conv_profile() {
+delete_conv_profile() { #delete conversation profile
   cids=$(list_conv_proviles | awk '/'$1'/ {printf $NF" "}' 2>/dev/null)
   [[ -z $cids ]] && echo "Can't get agent ids for $1" && return
   for cid in $cids
@@ -98,7 +98,7 @@ delete_conv_profile() {
   done
 }
 
-chat() {
+chat() { # analyze content of text input expect 1-url(to participant id) and any number of  of texts
    [[ -z $1 ]] && echo "missing participant id" && return
    url="$1" ; shift
    for t in "$@"
@@ -109,13 +109,13 @@ chat() {
   done
 }
 
-list_convs() {
+list_convs() { # list ongoing conevrsations 
   [[ -n $1 ]] && convs="$(gdfcurl "projects/$PROJECT_ID/conversations/" |jq -r '.conversations[]|select(.conversationProfile|test("'$1'"))|[.name,.conversationProfile,lifecycleState]|@tsv' 2>/dev/null)" || \
   convs="$(gdfcurl "projects/$PROJECT_ID/conversations/" | jq '.conversations[]|select(.lifecycleState != "COMPLETED")|.name' 2>/dev/null)"
   [[ ! "$convs" == "null" ]] && echo "$convs"
 }
 
-saySomething() {
+saySomething() { # creates eevrything you need to trigger text flowing to insights, expext text
   convid="";partid="";profile=""
   profiles=$(list_conv_profiles | tail -1 2>/dev/null)
   if [[ -z $profiles ]]; then
@@ -138,18 +138,18 @@ saySomething() {
 
 }
 
-sayAnotherThing() {
+sayAnotherThing() { # if you already have a conversation - you can add text to it with this.
   chat "$partid" "$@"
 }
 
-complete_all_conv() {
+complete_all_conv() { # complete conevrsations - this is needed for data to pass to insights. 
   for c in $(list_convs)
   do
     gdfcurl ${c}:complete post
   done
 }
 
-detectIntent() {
+detectIntent() { # call detect intent on the text
   uuid=$(uuidgen)
   for t in "$@"
   do
@@ -157,16 +157,16 @@ detectIntent() {
   done
 }
 
-create_agent() {
+create_agent() { # create an agent, expect 1 agent name 2 - language, 3 timezone - has default for all 
       rm tmp/create_agent_resp 2>/dev/null
-      agent="${2:-testAgent}"
-      lc="${3:-$LANGUAGE_CODE}"
-      tz="${4:-America/Los_Angeles}"
+      agent="${1:-testAgent}"
+      lc="${2:-$LANGUAGE_CODE}"
+      tz="${3:-America/Los_Angeles}"
       echo "creating agent $agent language $lc timezone $tz "
       dfcurl "$location/agents" post '{"displayName":"'$agent'","defaultLanguageCode":"'$lc'","timeZone":"'$tz'"}' create_agent_resp
 }
 
-import_agent() {
+import_agent() { # create an agent and import base64 encoded file (restore) expet 1 - file (required) ,2 name 
       rm tmp/payload 2>/dev/null
       if [[ -z $import_agent_id ]]; then
         create_agent ${2} # doing this so we can retry
@@ -178,7 +178,7 @@ import_agent() {
       [[ -f tmp/payload ]] && dfcurl "$location/agents/${import_agent_id}:restore" post tmp/payload 
 }
 
-yesno() {
+yesno() { # promot with y/n args: 1-text 
     cont=0
     while [[ $cont == 0 ]]
     do
@@ -188,8 +188,8 @@ yesno() {
     done
 }
 
-f() {
-  grep \(\) ${BASH_SOURCE[0]} | cut -d\( -f1
+f() { #list all functions in this file with description
+   awk '/\(\)/ {sub(/\(\) \{/,"");split($0,a,"#");printf "%-20s : %s\n",a[1],a[2]}' ${BASH_SOURCE[0]} | sed 's/:\s*/: /g' 
 }
 
 # This is where the main starts...
@@ -203,7 +203,7 @@ echo AGENT_ID "$AGENT_ID" PROJECT_ID $PROJECT_ID LOCATION_ID $LOCATION_ID LANGUA
 
 if [[ -z $AGENT_ID ]];then 
     echo "You must have at least one agent created" 
-    yesno ""Create a sample agent in pacific time en-us (financial services)?"
+    yesno "Create a sample agent in pacific time en-us (financial services)?"
     [[ ${prompt,,} == "y" ]] &&  import_agent agents/finserv_agent.b64 
 fi
 

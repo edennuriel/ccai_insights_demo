@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # set -x
 
+REST_POLICY="TRUE"
 
 echo > logs/error.log
 [[ -n $1 ]] && PROJECT_ID=$1 || PROJECT_ID="$(gcloud config get-value project)"
@@ -15,28 +16,28 @@ else
     echo "project $PROJECT_ID was not found"
     exit 1
 fi
-source reset-policies.sh $PROJECT_ID  2>logs/error.log 1logs/stdout.log
+source reset-policies.sh $PROJECT_ID  2>logs/error.log 1>logs/stdout.log
 
 prepare_project() {
 	if [[ -n $PROJECT_ID ]]; then
 
-	gcloud iam service-accounts create $DFSA --description "Service account for dialog flow runtime to export conversation to insights" --display-name "$DFSA" 2>logs/error.log 1logs/stdout.log
+	gcloud iam service-accounts create $DFSA --description "Service account for dialog flow runtime to export conversation to insights" --display-name "$DFSA" 2>logs/error.log 1>logs/stdout.log
 	echo -n "waiting for sa to be created.."
 	while [[ -z $sa ]]
 	do
-	    sa=$(gcloud iam service-accounts list --format json | jq -r '.[]|select(.displayName|test("'$DFSA'"))|.email') 2>logs/error.log 1logs/stdout.log
+	    sa=$(gcloud iam service-accounts list --format json | jq -r '.[]|select(.displayName|test("'$DFSA'"))|.email') 2>logs/error.log 1>logs/stdout.log
 	    sleep 1
         echo -n .
 	done
 	echo done..sa=$sa
 	export sa
 	echo adding dialogflow role
-	gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$sa" --role="roles/dialogflow.admin" 2>logs/error.log 1logs/stdout.log >/dev/null
+	gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$sa" --role="roles/dialogflow.admin" 2>logs/error.log 1>logs/stdout.log >/dev/null
 	echo getting key for sa
 	echo "waiting for pilicy changes to take effect..."
     while [[ ! -f  ~/df-insights-key.json ]]
     do
-        gcloud iam service-accounts keys create ~/df-insights-key.json --iam-account=$sa 2>logs/error.log 1logs/stdout.log >/dev/null
+        gcloud iam service-accounts keys create ~/df-insights-key.json --iam-account=$sa 2>logs/error.log 1>logs/stdout.log >/dev/null
         sleep 5
         echo -n .
     done
@@ -51,10 +52,10 @@ fi
 }
 
 enable_services() {
-  cat demo_services.txt | xargs echo gcloud service enable 
+  cat demo_services.txt | xargs gcloud services enable 
   
 }
-reset_inherited_policies "$PROJECT_ID" 2>logs/error.log 1logs/stdout.log
+[[ $RESET_POLCY == "TRUE" ]] && reset_inherited_policies "$PROJECT_ID" 2>logs/error.log 1>logs/stdout.log
 enable_services &&  prepare_project 
 
 #this seems to not be available anymore, neable in the console.
