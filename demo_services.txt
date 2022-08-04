@@ -1,0 +1,5 @@
+speech.googleapis.com                    
+texttospeech.googleapis.com             
+contactcenterinsights.googleapis.com
+storage.googleapis.com
+dialogflow.googleapis.com

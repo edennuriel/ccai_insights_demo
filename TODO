@@ -1,0 +1,5 @@
+Todo: use python sdk to do the same with cx - find out if I need an agent profile, and conversation id at all when using cx?
+ccai massive demo - https://github.com/GoogleCloudPlatform/dialogflow-ccai-omnichannel
+api cx https://cloud.google.com/dialogflow/cx/docs/reference/rest/v3beta1-overview
+
+
