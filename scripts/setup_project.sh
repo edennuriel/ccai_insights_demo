@@ -58,7 +58,7 @@ enable_services() {
 [[ $RESET_POLCY == "TRUE" ]] && reset_inherited_policies "$PROJECT_ID" 2>logs/error.log 1>logs/stdout.log
 enable_services &&  prepare_project 
 
-#this seems to not be available anymore, neable in the console.
+#this seems to not be available anymore, enable in the console.
 #enable_integration
 
 # enable_integration() {
